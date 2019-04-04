@@ -19,7 +19,7 @@ app.get('/login', function(req, res) {
 		res.send('you may now go to unity');
 	
 });
-
+app.use(express.static('public'));
 
 
 
