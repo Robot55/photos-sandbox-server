@@ -7,16 +7,42 @@ var request = require ('request');
 var GoogleStrategy = require('passport-google-oauth20').Strategy;
 var myToken = '';
 
+// POST https://photoslibrary.googleapis.com/v1/mediaItems:search
+
 app.get('/photos', function(req, res) {
-	request({url: 'https://photoslibrary.googleapis.com/v1/albums', headers:{'Authorization': 'Bearer ' +myToken}}, function(err, response, body){
-		res.json(body);
-		console.log(body);  
+	request(
+		{
+			url: 'https://photoslibrary.googleapis.com/v1/mediaItems:search',
+			qs: {'fields': 'mediaItems(baseUrl)'},
+			method: 'POST',
+			json: {
+			  "pageSize": req.query.pageSize || 20,
+			  "filters": {
+				"mediaTypeFilter": {
+				  "mediaTypes": [
+					"PHOTO"
+				  ]
+				},
+				"contentFilter": {
+				  "excludedContentCategories": [
+					"SCREENSHOTS",
+					"DOCUMENTS",
+					"NONE"
+				  ]
+				}
+			  }
+			},
+			headers:{'Authorization': 'Bearer ' +myToken}
+		
+		}, function(err, response, body){
+			res.json(body.mediaItems);
+			console.log(body);  
 	  })
     
 });
 
 app.get('/login', function(req, res) {
-		res.send('you may now go to unity');
+		res.send('GSuite Login Completed.\n Unity and AFrame Apps can now use APIs');
 	
 });
 app.use(express.static('public'));
@@ -30,7 +56,7 @@ app.use(express.static('public'));
 passport.use(new GoogleStrategy({
     clientID: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    callbackURL: "https://photos-sandbox-server.herokuapp.com/auth/google/callback"
+    callbackURL: process.env.MY_DOMAIN+"/auth/google/callback"
   },
   function(token, tokenSecret, profile, done) {
       /*User.findOrCreate({ googleId: profile.id }, function (err, user) {
@@ -63,11 +89,6 @@ app.get('/auth/google/callback',
 
 
 
-
-
-
-
-
-
+//keep this last (for convention's sake?)
 app.listen(port);
 
