@@ -5,16 +5,18 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-	"start": "node index.js"
+    "start": "node index.js"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
     "dotenv": "^7.0.0",
     "express": "^4.16.4",
+    "mongoose": "^5.5.0",
     "passport": "^0.4.0",
     "passport-google-oauth": "^2.0.0",
     "passport-google-oauth20": "^2.0.0",
-    "request": "^2.88.0"
+    "request": "^2.88.0",
+    "sha1": "^1.1.1"
   }
 }
