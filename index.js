@@ -112,7 +112,10 @@ app.get('/photos', function(req, res) {
 })
 
 app.get('/login', function(req, res) {
-		res.send('GSuite Login Completed.\n Unity and AFrame Apps can now use APIs')
+		res.json({"message": "GSuite Login Completed.\n Unity and AFrame Apps can now use APIs",
+					"status": "ok"	
+		
+				})
 	
 })
 app.use(express.static('public'))
