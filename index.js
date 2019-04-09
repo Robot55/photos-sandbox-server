@@ -1,20 +1,30 @@
-var sha1 = require('sha1')
-var express    = require('express')
-var cors = require('cors')
-var cookieParser = require('cookie-parser')
-require('dotenv').config()
-var app        = express()
-app.use(cookieParser())
-app.use(cors())
+
+require('dotenv').config()											// add DotEnv to support process.env local vars
 var port = process.env.PORT || 3000       // set our port
-var passport = require('passport')
+
+var express			= require('express')
+var cors 			= require('cors')								// support cors
+var cookieParser 	= require('cookie-parser')						// support read/write cookies for hash
+var passport 		= require('passport')							// easy login
+var GoogleStrategy 	= require('passport-google-oauth20').Strategy	//easy login Google
+var sha1			= require('sha1')								// support SHA hashing
 var request = require ('request')
-var GoogleStrategy = require('passport-google-oauth20').Strategy
-var myToken = ''
 var mongoose = require('mongoose')
 var findOrCreate = require('mongoose-findorcreate')
+var tools			= require('./tools')
+var app 			= express()
+
+app.use(cookieParser())
+app.use(cors())
 
 
+
+// TESTING require OF MY OWN .JS FILE
+console.log("==================\n")
+console.log(typeof tools.foo); // => 'function'
+console.log(typeof tools.bar); // => 'function'
+console.log(typeof tools.zemba); // => undefined
+console.log("==================\n")
 
 mongoose.connect(process.env.MONGODB_URI, {useNewUrlParser: true})
 var Schema = mongoose.Schema;
@@ -40,46 +50,64 @@ app.get('/photos', function(req, res) {
 	if (!req.query.hash){
 		
 		res.json({
-			"error": "please authenticate",
+			"error": "please authenticate - hash missing",
 			"errorCode": 401	
 
 		})
 	}
-	request(
-		{
-			url: 'https://photoslibrary.googleapis.com/v1/mediaItems:search',
-			qs: {'fields': 'mediaItems(baseUrl)'},
-			method: 'POST',
-			json: {
-			  "pageSize": req.query.pageSize || 20,
-			  "filters": {
-				"mediaTypeFilter": {
-				  "mediaTypes": [
-					"PHOTO"
-				  ]
-				},
-				"contentFilter": {
-				  "excludedContentCategories": [
-					"SCREENSHOTS",
-					"DOCUMENTS",
-					"NONE"
-				  ]
-				}
-			  }
-			},
-			headers:{'Authorization': 'Bearer ' +myToken}
-		
-		}, function(err, response, body){
-			if (err) {
+	
+		 Pairing.findOne({"hash": req.query.hash}).populate("user").exec( function(err, pairing){
+			 if (err) {
 				res.json({
-				"error": "please authenticate",
+				"error": "please authenticate - hash mismatch",
+				"createNewPairingUrl": process.env.MY_DOMAIN+"/createNewPairing",
 				"errorCode": 401	
 				})
 				return
 			}
-			res.json(body.mediaItems)
-			console.log(body)  
-	  })
+			if (pairing){
+				var user = pairing.user
+				console.log("contents of token: ",user.token)
+				
+				request(
+				{
+					url: 'https://photoslibrary.googleapis.com/v1/mediaItems:search',
+					qs: {'fields': 'mediaItems(baseUrl)'},
+					method: 'POST',
+					json: {
+					  "pageSize": req.query.pageSize || 20,
+					  "filters": {
+						"mediaTypeFilter": {
+						  "mediaTypes": [
+							"PHOTO"
+						  ]
+						},
+						"contentFilter": {
+						  "excludedContentCategories": [
+							"SCREENSHOTS",
+							"DOCUMENTS",
+							"NONE"
+						  ]
+						}
+					  }
+					},
+					headers:{'Authorization': 'Bearer ' +user.token}
+				
+				}, function(err, response, body){
+					if (err) {
+						res.json({
+						"error": "please authenticate",
+						"errorCode": 401	
+						})
+						return
+					}
+					res.json(body.mediaItems)
+					console.log(body)  
+			  })	
+			}		 
+		 })
+			
+	
     
 })
 
@@ -95,10 +123,10 @@ app.get('/createNewPairing', function(req, res) {
 		newPairing.save(function (err, newPairing) {
 			if (err) return console.error(err)
 			pairingUrl = process.env.MY_DOMAIN+'/pair/'+newPairing.hash
-			res.json{
+			res.json({
 				"url": pairingUrl,
 				"hash": newPairing.hash
-			}
+			})
 		 })
 		
 		
