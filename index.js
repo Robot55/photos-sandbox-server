@@ -112,10 +112,18 @@ app.get('/photos', function(req, res) {
 })
 
 app.get('/login', function(req, res) {
-		res.json({"message": "GSuite Login Completed.\n Unity and AFrame Apps can now use APIs",
-					"status": "ok"	
-		
-				})
+		res.json({
+		"error": "OK",
+		"errorCode": "200"	
+		})
+	
+})
+
+app.get('/loginfail', function(req, res) {
+		res.json({
+		"error": "Passport failed in authenticating via Google. Maybe retry later",
+		"errorCode": "500"	
+		})
 	
 })
 app.use(express.static('public'))
@@ -186,8 +194,8 @@ app.get('/pair/:hash', function(req,res){
 app.get('/auth/google/callback', 
   passport.authenticate('google', { failureRedirect: '/login'}),
   function(req, res) {
-    res.redirect('/login');
-  });
+    res.redirect('/login')
+  })
 
 
 
