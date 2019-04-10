@@ -3,8 +3,8 @@ require('dotenv').config()											// add DotEnv to support process.env local 
 var port = process.env.PORT || 3000       // set our port
 
 var express			= require('express')
-var cors 			= require('cors')								// support cors
 var cookieParser 	= require('cookie-parser')						// support read/write cookies for hash
+var cors 			= require('cors')								// support cors
 var passport 		= require('passport')							// easy login
 var GoogleStrategy 	= require('passport-google-oauth20').Strategy	//easy login Google
 var sha1			= require('sha1')								// support SHA hashing
@@ -12,8 +12,8 @@ var request = require ('request')
 var mongoose = require('mongoose')
 var findOrCreate = require('mongoose-findorcreate')
 var tools			= require('./tools')
-var app 			= express()
 
+var app = express()
 app.use(cookieParser())
 app.use(cors())
 
@@ -181,11 +181,11 @@ passport.use(new GoogleStrategy({
 //   back to this application at /auth/google/callback
 app.get('/auth/google',passport.authenticate('google', { scope: ['profile','https://www.googleapis.com/auth/photoslibrary.readonly']}));
 
-app.get('/pair/:hash', function(req,res){
+app.get('/pair/:hash', function(req, res)
+		{
 			res.cookie('hash', req.params.hash)
 			res.redirect('/auth/google')
-			}
-		)
+		})
 // GET /auth/google/callback
 //   Use passport.authenticate() as route middleware to authenticate the
 //   request.  If authentication fails, the user will be redirected back to the
