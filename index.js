@@ -3,7 +3,8 @@ require('dotenv').config()											// add DotEnv to support process.env local 
 var port = process.env.PORT || 3000       // set our port
 
 var express			= require('express')
-var cookieParser 	= require('cookie-parser')						// support read/write cookies for hash
+var cookieParser 	= require('cookie-parser')	
+var timeout			= require('express-timeout-handler')					// support read/write cookies for hash
 var cors 			= require('cors')								// support cors
 var passport 		= require('passport')							// easy login
 var GoogleStrategy 	= require('passport-google-oauth20').Strategy	//easy login Google
@@ -16,6 +17,20 @@ var tools			= require('./tools')
 var app = express()
 app.use(cookieParser())
 app.use(cors())
+
+//options for timeout settings
+var options = {
+  timeout: 10000,
+  onTimeout: function(req, res) {
+	res.redirect("/timeOut")
+  },
+  onDelayedResponse: function(req, method, args, requestTime) {
+    console.log(`Attempted to call ${method} after timeout`)
+  },
+  disable: ['write', 'setHeaders', 'send', 'json', 'end']
+}
+ 
+app.use(timeout.handler(options))
 
 
 
@@ -47,6 +62,7 @@ var Pairing = mongoose.model('Pairing', pairingSchema)
 // POST https://photoslibrary.googleapis.com/v1/mediaItems:search
 
 app.get('/photos', function(req, res) {
+	
 	if (!req.query.hash){
 		
 		res.json({
@@ -101,8 +117,26 @@ app.get('/photos', function(req, res) {
 						})
 						return
 					}
-					res.json(body.mediaItems)
-					console.log(body)  
+					
+					if ((body.error)){
+						console.log("body.error FOUND!!!")
+						res.json({
+						"error": "please authenticate again - invalid auth token",
+						"errorCode": 401	
+						})
+						return
+						
+					}
+					
+					if (body.mediaItems){
+						console.log("body.mediaItems FOUND!!!")
+						res.json(body.mediaItems)
+						console.log("this is the result from /photos page: \n")
+						console.log(body) 
+						return
+						}
+					
+					 
 			  })	
 			}		 
 		 })
@@ -114,15 +148,15 @@ app.get('/photos', function(req, res) {
 app.get('/login', function(req, res) {
 		res.json({
 		"error": "OK",
-		"errorCode": "200"	
+		"errorCode": 200	
 		})
 	
 })
 
-app.get('/loginfail', function(req, res) {
+app.get('/timeOut', function(req, res) {
 		res.json({
-		"error": "Passport failed in authenticating via Google. Maybe retry later",
-		"errorCode": "500"	
+		"error": "Auth Server returns a Timeout error. Maybe retry later",
+		"errorCode": 503	
 		})
 	
 })
@@ -159,6 +193,7 @@ passport.use(new GoogleStrategy({
   },
   function(req, token, tokenSecret, profile, done) {
       User.findOrCreate({ 'name': profile.id }, function (err, user) {
+		console.log("New Hash Obtained:")
 		console.log({'hash': req.cookies.hash})
 		Pairing.findOne({'hash': req.cookies.hash}, function (err, pairing){
 			if (err) return console.error(err)
