@@ -202,7 +202,7 @@ passport.use(new GoogleStrategy({
 		Pairing.findOne({'hash': req.cookies.hash}, function (err, pairing){
 			if (err) {
 				
-				console log("=== No Pairing Found ===")
+				console.log("=== No Pairing Found ===")
 				return console.error(err)
 			}
 			user.token=token
