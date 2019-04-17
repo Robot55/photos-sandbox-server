@@ -72,8 +72,9 @@ app.get('/photos', function(req, res) {
 		})
 	}
 	
-		 Pairing.findOne({"hash": req.query.hash}).populate("user").exec( function(err, pairing){
+		 Pairing.findOne({"hash": req.query.hash}).populate('user').exec( function(err, pairing){
 			 if (err) {
+				console.log("Error in pairing")
 				res.json({
 				"error": "please authenticate - hash mismatch",
 				"createNewPairingUrl": process.env.MY_DOMAIN+"/createNewPairing",
@@ -82,6 +83,16 @@ app.get('/photos', function(req, res) {
 				return
 			}
 			if (pairing){
+				
+				if (!pairing.user){
+					console.log("= = >> ERROR: found pairing but it has no user")
+					res.json({
+					"error": "This hash has no user associated with it",
+					"errorCode": 401,
+					"createNewPairingUrl": process.env.MY_DOMAIN+"/createNewPairing"
+					})
+					return
+				}
 				var user = pairing.user
 				console.log("contents of token: ",user.token)
 				
@@ -227,6 +238,7 @@ app.get('/auth/google',passport.authenticate('google', { scope: ['profile','http
 app.get('/pair/:hash', function(req, res)
 		{
 			res.cookie('hash', req.params.hash)
+			console.log("added client cookie")
 			res.redirect('/auth/google')
 		})
 // GET /auth/google/callback
