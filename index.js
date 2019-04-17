@@ -193,10 +193,18 @@ passport.use(new GoogleStrategy({
   },
   function(req, token, tokenSecret, profile, done) {
       User.findOrCreate({ 'name': profile.id }, function (err, user) {
+		if (err){
+			console.log("= = = error in findOrCreate = = =")
+			return console.error(err)
+		}
 		console.log("New Hash Obtained:")
 		console.log({'hash': req.cookies.hash})
 		Pairing.findOne({'hash': req.cookies.hash}, function (err, pairing){
-			if (err) return console.error(err)
+			if (err) {
+				
+				console log("=== No Pairing Found ===")
+				return console.error(err)
+			}
 			user.token=token
 			user.save()
 			pairing.user=user
