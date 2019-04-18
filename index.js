@@ -73,6 +73,8 @@ var pairingSchema = new mongoose.Schema({
   user: {type: Schema.Types.ObjectId, ref: 'User'}
 });
 
+pairingSchema.plugin(findOrCreate)
+
 var Pairing = mongoose.model('Pairing', pairingSchema)
 
 
@@ -114,8 +116,19 @@ app.get('/gphotos', function(req, res) {
 					})
 					return
 				}
+
 				var user = pairing.user
-				console.log("contents of token: ",user.googleToken)
+				if (!user.googleToken){
+					console.log("ERROR. user has no googleToken")
+					res.json({
+						"error": "This user has no googleToken associated with it",
+						"errorCode": 401,
+						"existingPairingUrl": process.env.MY_DOMAIN+"/pair/"+req.query.hash,
+						"createNewPairingUrl": process.env.MY_DOMAIN+"/createNewPairing"
+						})
+						return
+				}
+				console.log("contents of google token: ",user.googleToken)
 				
 				request(
 				{
@@ -151,7 +164,7 @@ app.get('/gphotos', function(req, res) {
 					}
 					
 					if ((body.error)){
-						console.log("body.error FOUND!!!")
+						console.log("= = = body.error FOUND = = = \n" + JSON.parse(body.error))
 						res.json({
 						"error": "please authenticate again - invalid auth token",
 						"errorCode": 401	
@@ -205,7 +218,17 @@ app.get('/instaphotos', function(req, res) {
 					return
 				}
 				var user = pairing.user
-				console.log("contents of token: ",user.instagramToken)
+				if (!user.instagramToken){
+					console.log("ERROR. user has no instagramToken")
+					res.json({
+						"error": "This user has no instagramToken associated with it",
+						"errorCode": 401,
+						"existingPairingUrl": process.env.MY_DOMAIN+"/pair/"+req.query.hash,
+						"createNewPairingUrl": process.env.MY_DOMAIN+"/createNewPairing"
+						})
+						return
+				}
+				console.log("contents of insta token: ",user.instagramToken)
 				
 				request(
 				{
@@ -299,7 +322,7 @@ function(req, token, refreshToken, profile, done) {
 			return console.error(err)
 		}
 
-		Pairing.findOne({'hash': req.cookies.hash}, function (err, pairing){
+		Pairing.findOrCreate({'hash': req.cookies.hash}, function (err, pairing){
 			if (err) {
 				
 				console.log("=== No Pairing or hash cookie Found (insta)===")
@@ -333,7 +356,7 @@ passport.use(new GoogleStrategy({
 				return console.error(err)
 			}
 			console.log("Getting client Hash from Cookie:\n" + req.cookies.hash)
-			Pairing.findOne({'hash': req.cookies.hash}, function (err, pairing){
+			Pairing.findOrCreate({'hash': req.cookies.hash}, function (err, pairing){
 				if (err) {
 					
 					console.log("=== No Pairing or hash cookie Found (google)===")
@@ -355,7 +378,11 @@ app.get('/pair/:hash', function(req, res)
 		{
 			res.cookie('hash', req.params.hash)
 			console.log("added client cookie")
-			res.redirect('/auth/google')
+			res.json({
+				"instagram_url": process.env.MY_DOMAIN+"/auth/instagram",
+				"google_url": process.env.MY_DOMAIN+"/auth/google",
+				"hash": req.params.hash
+			})
 		})
 		
 app.get('/auth/google',passport.authenticate('google', { scope: ['profile','https://www.googleapis.com/auth/photoslibrary.readonly']}));
