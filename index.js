@@ -77,11 +77,8 @@ pairingSchema.plugin(findOrCreate)
 
 var Pairing = mongoose.model('Pairing', pairingSchema)
 
-
 console.log("= = = Schemas & Models up and running = = =\n")
 // POST https://photoslibrary.googleapis.com/v1/mediaItems:search
-
-
 
 
 app.get('/gphotos', function(req, res) {
@@ -268,8 +265,6 @@ app.get('/instaphotos', function(req, res) {
 		 })
 })
 
-
-
 app.get('/login', function(req, res) {
 		res.json({
 		"error": "OK",
@@ -294,7 +289,6 @@ app.get('/photos', function(req, res) {
 	})
 })
 
-
 app.use(express.static('public'))
 
 app.get('/createNewPairing', function(req, res) {
@@ -309,13 +303,14 @@ app.get('/createNewPairing', function(req, res) {
 			})
 		 })
 });
+
 passport.use(new InstagramStrategy({
 	clientID: process.env.INSTAGRAM_CLIENT_ID,
 	clientSecret: process.env.INSTAGRAM_CLIENT_SECRET,
 	callbackURL: process.env.MY_DOMAIN+"/auth/instagram/callback",
 	passReqToCallback: true
 },
-function(req, token, refreshToken, profile, done) {
+function(req, accessToken, refreshToken, profile, done) {
 	User.findOrCreate({ 'instagramID': profile.id }, function (err, user) {
 		if (err){
 			console.log("= = = error in instagramID findOrCreate = = =")
@@ -328,7 +323,7 @@ function(req, token, refreshToken, profile, done) {
 				console.log("=== No Pairing or hash cookie Found (insta)===")
 				return console.error(err)
 			}
-			user.instagramToken=token
+			user.instagramToken=accessToken
 			user.save()
 			pairing.user=user
 			pairing.save()
@@ -350,6 +345,7 @@ passport.use(new GoogleStrategy({
 	passReqToCallback: true
   },
   function(req, token, tokenSecret, profile, done) {
+		User.findOne({})
     User.findOrCreate({ 'googleID': profile.id }, function (err, user) {
 			if (err){
 				console.log("= = = error in googleID findOrCreate = = =")
@@ -385,14 +381,13 @@ app.get('/pair/:hash', function(req, res)
 			})
 		})
 		
-app.get('/auth/google',passport.authenticate('google', { scope: ['profile','https://www.googleapis.com/auth/photoslibrary.readonly']}));
+app.get('/auth/google',passport.authenticate('google', { scope: ['profile', 'email','https://www.googleapis.com/auth/photoslibrary.readonly']}));
 
 app.get('/auth/google/callback', 
   passport.authenticate('google', { failureRedirect: '/login'}),
   function(req, res) {
     res.redirect('/login')
   })
-
 
 	app.get('/auth/instagram',
   passport.authenticate('instagram'));
@@ -403,8 +398,6 @@ app.get('/auth/google/callback',
 			// Successful authentication, redirect home.
 			res.redirect('/login');
 		});
-
-
 
 //keep this last (for convention's sake?)
 app.listen(port);
