@@ -60,7 +60,9 @@ var Schema = mongoose.Schema;
 
 var userSchema = new mongoose.Schema({
   googleID: String,
-  googleToken: String,
+	googleToken: String,
+	instagramID: String,
+	instagramToken: String
 });
 userSchema.plugin(findOrCreate)
 
@@ -74,7 +76,7 @@ var pairingSchema = new mongoose.Schema({
 var Pairing = mongoose.model('Pairing', pairingSchema)
 
 
-console.log("= = = Schemas & Models up and running = = =")
+console.log("= = = Schemas & Models up and running = = =\n")
 // POST https://photoslibrary.googleapis.com/v1/mediaItems:search
 
 
@@ -170,6 +172,81 @@ app.get('/gphotos', function(req, res) {
 		 })
 })
 
+app.get('/instaphotos', function(req, res) {
+	
+	if (!req.query.hash){
+		
+		res.json({
+			"error": "please authenticate - hash missing",
+			"errorCode": 401	
+
+		})
+	}
+	
+		 Pairing.findOne({"hash": req.query.hash}).populate('user').exec( function(err, pairing){
+			 if (err) {
+				console.log("Error in pairing")
+				res.json({
+				"error": "please authenticate - hash mismatch",
+				"createNewPairingUrl": process.env.MY_DOMAIN+"/createNewPairing",
+				"errorCode": 401	
+				})
+				return
+			}
+			if (pairing){
+				
+				if (!pairing.user){
+					console.log("= = >> ERROR: found pairing but it has no user")
+					res.json({
+					"error": "This hash has no user associated with it",
+					"errorCode": 401,
+					"createNewPairingUrl": process.env.MY_DOMAIN+"/createNewPairing"
+					})
+					return
+				}
+				var user = pairing.user
+				console.log("contents of token: ",user.instagramToken)
+				
+				request(
+				{
+					url: 'https://api.instagram.com/v1/users/self/media/recent?access_token='+user.instagramToken,
+					qs: {'fields': 'mediaItems(baseUrl)'},
+					method: 'GET',
+					headers:{'Authorization': 'Bearer ' +user.instagramToken}
+				
+				}, function(err, response, body){
+					if (err) {
+						res.json({
+						"error": "please authenticate",
+						"errorCode": 401	
+						})
+						return
+					}
+					
+					if (body.error){
+						console.log("body.error FOUND!!!")
+						res.json({
+						"error": "please authenticate again - invalid auth token",
+						"errorCode": 401	
+						})
+						return
+						
+					}
+					
+					if (body){
+						console.log("body FOUND!!!")
+						res.json(JSON.parse(body))
+						console.log("this is the result from /instaphotos page: \n")
+						console.log(body) 
+						return
+						}
+			  })	
+			}		 
+		 })
+})
+
+
+
 app.get('/login', function(req, res) {
 		res.json({
 		"error": "OK",
@@ -212,11 +289,30 @@ app.get('/createNewPairing', function(req, res) {
 passport.use(new InstagramStrategy({
 	clientID: process.env.INSTAGRAM_CLIENT_ID,
 	clientSecret: process.env.INSTAGRAM_CLIENT_SECRET,
-	callbackURL: process.env.MY_DOMAIN+"/auth/instagram/callback"
+	callbackURL: process.env.MY_DOMAIN+"/auth/instagram/callback",
+	passReqToCallback: true
 },
-function(accessToken, refreshToken, profile, done) {
-	User.findOrCreate({ instagramId: profile.id }, function (err, user) {
-		return done(err, user);
+function(req, token, refreshToken, profile, done) {
+	User.findOrCreate({ 'instagramID': profile.id }, function (err, user) {
+		if (err){
+			console.log("= = = error in instagramID findOrCreate = = =")
+			return console.error(err)
+		}
+
+		Pairing.findOne({'hash': req.cookies.hash}, function (err, pairing){
+			if (err) {
+				
+				console.log("=== No Pairing or hash cookie Found (insta)===")
+				return console.error(err)
+			}
+			user.instagramToken=token
+			user.save()
+			pairing.user=user
+			pairing.save()
+			
+			return done()
+		})
+	//	return done(err, user);
 	});
 }
 ));
@@ -231,37 +327,29 @@ passport.use(new GoogleStrategy({
 	passReqToCallback: true
   },
   function(req, token, tokenSecret, profile, done) {
-      User.findOrCreate({ 'googleID': profile.id }, function (err, user) {
-		if (err){
-			console.log("= = = error in findOrCreate = = =")
-			return console.error(err)
-		}
-		console.log("New Hash Obtained:")
-		console.log({'hash': req.cookies.hash})
-		Pairing.findOne({'hash': req.cookies.hash}, function (err, pairing){
-			if (err) {
-				
-				console.log("=== No Pairing Found ===")
+    User.findOrCreate({ 'googleID': profile.id }, function (err, user) {
+			if (err){
+				console.log("= = = error in googleID findOrCreate = = =")
 				return console.error(err)
 			}
-			user.googleToken=token
-			user.save()
-			pairing.user=user
-			pairing.save()
-			
-			return done()
-		})
-		//return done(err, user)
+			console.log("Getting client Hash from Cookie:\n" + req.cookies.hash)
+			Pairing.findOne({'hash': req.cookies.hash}, function (err, pairing){
+				if (err) {
+					
+					console.log("=== No Pairing or hash cookie Found (google)===")
+					return console.error(err)
+				}
+				user.googleToken=token
+				user.save()
+				pairing.user=user
+				pairing.save()
+				
+				return done()
+			})
+			//return done(err, user)
 	  })
   }
 ))
-
-// GET /auth/google
-//   Use passport.authenticate() as route middleware to authenticate the
-//   request.  The first step in Google authentication will involve redirecting
-//   the user to google.com.  After authorization, Google will redirect the user
-//   back to this application at /auth/google/callback
-app.get('/auth/google',passport.authenticate('google', { scope: ['profile','https://www.googleapis.com/auth/photoslibrary.readonly']}));
 
 app.get('/pair/:hash', function(req, res)
 		{
@@ -269,11 +357,9 @@ app.get('/pair/:hash', function(req, res)
 			console.log("added client cookie")
 			res.redirect('/auth/google')
 		})
-// GET /auth/google/callback
-//   Use passport.authenticate() as route middleware to authenticate the
-//   request.  If authentication fails, the user will be redirected back to the
-//   login page.  Otherwise, the primary route function function will be called,
-//   which, in this example, will redirect the user to the home page.
+		
+app.get('/auth/google',passport.authenticate('google', { scope: ['profile','https://www.googleapis.com/auth/photoslibrary.readonly']}));
+
 app.get('/auth/google/callback', 
   passport.authenticate('google', { failureRedirect: '/login'}),
   function(req, res) {
