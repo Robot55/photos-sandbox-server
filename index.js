@@ -8,11 +8,24 @@ var timeout			= require('express-timeout-handler')					// support read/write coo
 var cors 			= require('cors')								// support cors
 var passport 		= require('passport')							// easy login
 var GoogleStrategy 	= require('passport-google-oauth20').Strategy	//easy login Google
+var InstagramStrategy = require('passport-instagram').Strategy
 var sha1			= require('sha1')								// support SHA hashing
 var request = require ('request')
+
+var tools			= require('./tools')
+
+
+
 var mongoose = require('mongoose')
 var findOrCreate = require('mongoose-findorcreate')
-var tools			= require('./tools')
+
+
+
+var db = require('./db')
+
+//var mongoose = db.mongoose
+//var findOrCreate = db.findOrCreate
+
 
 var app = express()
 app.use(cookieParser())
@@ -35,18 +48,19 @@ app.use(timeout.handler(options))
 
 
 // TESTING require OF MY OWN .JS FILE
-console.log("==================\n")
-console.log(typeof tools.foo); // => 'function'
-console.log(typeof tools.bar); // => 'function'
-console.log(typeof tools.zemba); // => undefined
-console.log("==================\n")
+console.log("========================\n")
+//console.log(typeof tools.foo); // => 'function'
+//console.log(typeof tools.bar); // => 'function'
+//console.log(typeof tools.zemba); // => undefined
+console.log("= = = Server is UP = = =")
+console.log("========================\n")
 
 mongoose.connect(process.env.MONGODB_URI, {useNewUrlParser: true})
 var Schema = mongoose.Schema;
 
 var userSchema = new mongoose.Schema({
-  name: String,
-  token: String,
+  googleID: String,
+  googleToken: String,
 });
 userSchema.plugin(findOrCreate)
 
@@ -59,9 +73,14 @@ var pairingSchema = new mongoose.Schema({
 
 var Pairing = mongoose.model('Pairing', pairingSchema)
 
+
+console.log("= = = Schemas & Models up and running = = =")
 // POST https://photoslibrary.googleapis.com/v1/mediaItems:search
 
-app.get('/photos', function(req, res) {
+
+
+
+app.get('/gphotos', function(req, res) {
 	
 	if (!req.query.hash){
 		
@@ -94,7 +113,7 @@ app.get('/photos', function(req, res) {
 					return
 				}
 				var user = pairing.user
-				console.log("contents of token: ",user.token)
+				console.log("contents of token: ",user.googleToken)
 				
 				request(
 				{
@@ -118,7 +137,7 @@ app.get('/photos', function(req, res) {
 						}
 					  }
 					},
-					headers:{'Authorization': 'Bearer ' +user.token}
+					headers:{'Authorization': 'Bearer ' +user.googleToken}
 				
 				}, function(err, response, body){
 					if (err) {
@@ -142,18 +161,13 @@ app.get('/photos', function(req, res) {
 					if (body.mediaItems){
 						console.log("body.mediaItems FOUND!!!")
 						res.json(body.mediaItems)
-						console.log("this is the result from /photos page: \n")
+						console.log("this is the result from /gphotos page: \n")
 						console.log(body) 
 						return
 						}
-					
-					 
 			  })	
 			}		 
 		 })
-			
-	
-    
 })
 
 app.get('/login', function(req, res) {
@@ -171,6 +185,16 @@ app.get('/timeOut', function(req, res) {
 		})
 	
 })
+
+app.get('/photos', function(req, res) {
+	res.json({
+		"error": "your client is using /photos. it is obsolete. replace /photos in your client code to /gphotos",
+		"newGooglePhotosEndPoint": process.env.MY_DOMAIN+"/gphotos?hash="+(req.query.hash || ""),
+		"errorCode": 401	
+	})
+})
+
+
 app.use(express.static('public'))
 
 app.get('/createNewPairing', function(req, res) {
@@ -184,14 +208,18 @@ app.get('/createNewPairing', function(req, res) {
 				"hash": newPairing.hash
 			})
 		 })
-		
-		
-		
-		
-		
-	
 });
-
+passport.use(new InstagramStrategy({
+	clientID: process.env.INSTAGRAM_CLIENT_ID,
+	clientSecret: process.env.INSTAGRAM_CLIENT_SECRET,
+	callbackURL: process.env.MY_DOMAIN+"/auth/instagram/callback"
+},
+function(accessToken, refreshToken, profile, done) {
+	User.findOrCreate({ instagramId: profile.id }, function (err, user) {
+		return done(err, user);
+	});
+}
+));
 // Use the GoogleStrategy within Passport.
 //   Strategies in passport require a `verify` function, which accept
 //   credentials (in this case, a token, tokenSecret, and Google profile), and
@@ -203,7 +231,7 @@ passport.use(new GoogleStrategy({
 	passReqToCallback: true
   },
   function(req, token, tokenSecret, profile, done) {
-      User.findOrCreate({ 'name': profile.id }, function (err, user) {
+      User.findOrCreate({ 'googleID': profile.id }, function (err, user) {
 		if (err){
 			console.log("= = = error in findOrCreate = = =")
 			return console.error(err)
@@ -216,7 +244,7 @@ passport.use(new GoogleStrategy({
 				console.log("=== No Pairing Found ===")
 				return console.error(err)
 			}
-			user.token=token
+			user.googleToken=token
 			user.save()
 			pairing.user=user
 			pairing.save()
@@ -252,6 +280,16 @@ app.get('/auth/google/callback',
     res.redirect('/login')
   })
 
+
+	app.get('/auth/instagram',
+  passport.authenticate('instagram'));
+
+	app.get('/auth/instagram/callback', 
+		passport.authenticate('instagram', { failureRedirect: '/login' }),
+		function(req, res) {
+			// Successful authentication, redirect home.
+			res.redirect('/login');
+		});
 
 
 
