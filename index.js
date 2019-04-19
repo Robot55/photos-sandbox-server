@@ -4,6 +4,7 @@ var port = process.env.PORT || 3000       // set our port
 
 var express			= require('express')
 var cookieParser 	= require('cookie-parser')	
+var bodyParser = require('body-parser')
 var timeout			= require('express-timeout-handler')					// support read/write cookies for hash
 var cors 			= require('cors')								// support cors
 var passport 		= require('passport')							// easy login
@@ -29,6 +30,7 @@ var db = require('./db')
 
 var app = express()
 app.use(cookieParser())
+app.use(bodyParser.json())
 app.use(cors())
 
 //options for timeout settings
@@ -273,6 +275,14 @@ app.get('/login', function(req, res) {
 	
 })
 
+app.get('/Success', function(req, res) {
+	res.json({
+	"error": " Success!",
+	"errorCode": 200	
+	})
+
+})
+
 app.get('/timeOut', function(req, res) {
 		res.json({
 		"error": "Auth Server returns a Timeout error. Maybe retry later",
@@ -288,6 +298,8 @@ app.get('/photos', function(req, res) {
 		"errorCode": 401	
 	})
 })
+
+
 
 app.use(express.static('public'))
 
@@ -314,14 +326,16 @@ function(req, accessToken, refreshToken, profile, done) {
 	User.findOrCreate({ 'instagramID': profile.id }, function (err, user) {
 		if (err){
 			console.log("= = = error in instagramID findOrCreate = = =")
-			return console.error(err)
+			console.error(err)
+			return done(err) 
 		}
 
 		Pairing.findOrCreate({'hash': req.cookies.hash}, function (err, pairing){
 			if (err) {
 				
 				console.log("=== No Pairing or hash cookie Found (insta)===")
-				return console.error(err)
+				console.error(err)
+				return done(err)
 			}
 			user.instagramToken=accessToken
 			user.save()
@@ -362,7 +376,6 @@ passport.use(new GoogleStrategy({
 				user.save()
 				pairing.user=user
 				pairing.save()
-				
 				return done()
 			})
 			//return done(err, user)
@@ -374,11 +387,22 @@ app.get('/pair/:hash', function(req, res)
 		{
 			res.cookie('hash', req.params.hash)
 			console.log("added client cookie")
-			res.json({
-				"instagram_url": process.env.MY_DOMAIN+"/auth/instagram",
-				"google_url": process.env.MY_DOMAIN+"/auth/google",
-				"hash": req.params.hash
-			})
+			
+			if (!req.query.name){
+				res.json({
+					"instagram_url": process.env.MY_DOMAIN+"/auth/instagram",
+					"google_url": process.env.MY_DOMAIN+"/auth/google",
+					"hash": req.params.hash
+				})
+			} else {
+				var name=req.query.name.toLowerCase()
+				res.redirect(name == "google" ? "/auth/google" : name == "instagram" ? "/auth/instagram" : "/pair/"+req.params.hash )
+
+
+			}
+
+			
+			
 		})
 		
 app.get('/auth/google',passport.authenticate('google', { scope: ['profile', 'email','https://www.googleapis.com/auth/photoslibrary.readonly']}));
@@ -386,17 +410,18 @@ app.get('/auth/google',passport.authenticate('google', { scope: ['profile', 'ema
 app.get('/auth/google/callback', 
   passport.authenticate('google', { failureRedirect: '/login'}),
   function(req, res) {
-    res.redirect('/login')
+    res.redirect('/Success')
   })
 
 	app.get('/auth/instagram',
   passport.authenticate('instagram'));
 
 	app.get('/auth/instagram/callback', 
-		passport.authenticate('instagram', { failureRedirect: '/login' }),
+		passport.authenticate('instagram', { successRedirect: '/Success', failureRedirect: '/login' }),
 		function(req, res) {
+			console.log("function alive!")
 			// Successful authentication, redirect home.
-			res.redirect('/login');
+			res.redirect('/Success');
 		});
 
 //keep this last (for convention's sake?)
