@@ -277,7 +277,7 @@ app.get('/instaphotos', function(req, res) {
 							var photoUrls = new Array()
 							body.forEach(element => {
 								var newUrl = new PhotoUrl
-								newUrl.baseUrl=JSON.stringify(element['url'])
+								newUrl.baseUrl=(element['url'])
 								photoUrls.push(newUrl)
 							});
 							
