@@ -258,7 +258,34 @@ app.get('/instaphotos', function(req, res) {
 					
 					if (body){
 						console.log("body FOUND!!!")
-						res.json(JSON.parse(body))
+						body = JSON.parse(body)
+						if (body.data){
+							console.log("body.data found!")
+							body = body.data
+							var newbody = new Array()
+							body.forEach(element => {
+								if (element['images']['standard_resolution']){
+									console.log("found element.images.standard_res")
+									newbody.push(element['images']['standard_resolution'])
+								}
+							})
+							body = newbody
+							class PhotoUrl{
+									constructor(baseUrl='') {
+										this.baseUrl = baseUrl
+									}
+							}
+							var photoUrls = new Array()
+							body.forEach(element => {
+								var newUrl = new PhotoUrl
+								newUrl.baseUrl=JSON.stringify(element['url'])
+								photoUrls.push(newUrl)
+							});
+							
+							body = photoUrls
+
+						};
+						res.json(body)
 						console.log("this is the result from /instaphotos page: \n")
 						console.log(body) 
 						return
@@ -322,7 +349,7 @@ function(req, token, refreshToken, profile, done) {
 			return console.error(err)
 		}
 
-		Pairing.findOrCreate({'hash': req.cookies.hash}, function (err, pairing){
+		Pairing.findOne({'hash': req.cookies.hash}, function (err, pairing){
 			if (err) {
 				
 				console.log("=== No Pairing or hash cookie Found (insta)===")
@@ -356,7 +383,7 @@ passport.use(new GoogleStrategy({
 				return console.error(err)
 			}
 			console.log("Getting client Hash from Cookie:\n" + req.cookies.hash)
-			Pairing.findOrCreate({'hash': req.cookies.hash}, function (err, pairing){
+			Pairing.findOne({'hash': req.cookies.hash}, function (err, pairing){
 				if (err) {
 					
 					console.log("=== No Pairing or hash cookie Found (google)===")
