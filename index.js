@@ -1,39 +1,28 @@
 
-require('dotenv').config()											// add DotEnv to support process.env local vars
-var port = process.env.PORT || 3000       // set our port
+require('dotenv').config()				// add DotEnv to support process.env local vars
+var port = process.env.PORT || 3000       // set our port to the environment port or 3000 (local host)
 
-var express			= require('express')
-var cookieParser 	= require('cookie-parser')	
-var bodyParser = require('body-parser')
-var timeout			= require('express-timeout-handler')					// support read/write cookies for hash
-var cors 			= require('cors')								// support cors
+var express			= require('express') // adss express framework
+var cookieParser 	= require('cookie-parser')	// support read/write cookies for hash
+var bodyParser 		= require('body-parser')
+var timeout			= require('express-timeout-handler')			
+var cors 			= require('cors')								// support CORS
 var passport 		= require('passport')							// easy login
 var GoogleStrategy 	= require('passport-google-oauth20').Strategy	//easy login Google
-var InstagramStrategy = require('passport-instagram').Strategy
+var InstagramStrategy = require('passport-instagram').Strategy		//easy login Insta
+var request = require ('request')									//easy http/https request calls with auto redirect support
 var sha1			= require('sha1')								// support SHA hashing
-var request = require ('request')
-
-var tools			= require('./tools')
-
+var mongoose = require('mongoose')									// adds MongoDB moongoose framework
+var findOrCreate = require('mongoose-findorcreate')					// adds findOrCreate functionality to mongoose
 
 
-var mongoose = require('mongoose')
-var findOrCreate = require('mongoose-findorcreate')
-
-
-
-var db = require('./db')
-
-//var mongoose = db.mongoose
-//var findOrCreate = db.findOrCreate
-
-
+// define our express app
 var app = express()
-app.use(cookieParser())
+app.use(cookieParser())	// adds
 app.use(bodyParser.json())
-app.use(cors())
+app.use(cors())	//  This line to magically solves all cross domain error problems!
 
-//options for timeout settings
+// Timeout handling options Start
 var options = {
   timeout: 10000,
   onTimeout: function(req, res) {
@@ -44,28 +33,26 @@ var options = {
   },
   disable: ['write', 'setHeaders', 'send', 'json', 'end']
 }
- 
 app.use(timeout.handler(options))
 
-
-
-// TESTING require OF MY OWN .JS FILE
-console.log("========================\n")
-//console.log(typeof tools.foo); // => 'function'
-//console.log(typeof tools.bar); // => 'function'
-//console.log(typeof tools.zemba); // => undefined
 console.log("= = = Server is UP = = =")
 console.log("========================\n")
 
+
+// === DB MODEL DEFINITION START ===
 mongoose.connect(process.env.MONGODB_URI, {useNewUrlParser: true})
+
 var Schema = mongoose.Schema;
 
-var userSchema = new mongoose.Schema({
-  googleID: String,
+// Defines the user schema
+var userSchema = new Schema({
+	googleID: String,
 	googleToken: String,
 	instagramID: String,
 	instagramToken: String
 });
+
+// adds
 userSchema.plugin(findOrCreate)
 
 var User = mongoose.model('User', userSchema)
@@ -80,7 +67,8 @@ pairingSchema.plugin(findOrCreate)
 var Pairing = mongoose.model('Pairing', pairingSchema)
 
 console.log("= = = Schemas & Models up and running = = =\n")
-// POST https://photoslibrary.googleapis.com/v1/mediaItems:search
+
+// === MODEL DEFINITION END ===
 
 
 app.get('/gphotos', function(req, res) {
@@ -93,7 +81,6 @@ app.get('/gphotos', function(req, res) {
 
 		})
 	}
-	
 		 Pairing.findOne({"hash": req.query.hash}).populate('user').exec( function(err, pairing){
 			 if (err) {
 				console.log("Error in pairing")
