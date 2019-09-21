@@ -4,10 +4,10 @@ var port = process.env.PORT || 3000       // set our port to the environment por
 
 var express			= require('express') // adss express framework
 var cookieParser 	= require('cookie-parser')	// support read/write cookies for hash
-var bodyParser 		= require('body-parser')
-var timeout			= require('express-timeout-handler')			
+var bodyParser 		= require('body-parser')  // easy body parser for my JSONs
+var timeout			= require('express-timeout-handler')	// better timeout handler than I can code on my own.		
 var cors 			= require('cors')								// support CORS
-var passport 		= require('passport')							// easy login
+var passport 		= require('passport')							// easier login to multiple services
 var GoogleStrategy 	= require('passport-google-oauth20').Strategy	//easy login Google
 var InstagramStrategy = require('passport-instagram').Strategy		//easy login Insta
 var request = require ('request')									//easy http/https request calls with auto redirect support
@@ -18,7 +18,7 @@ var findOrCreate = require('mongoose-findorcreate')					// adds findOrCreate fun
 
 // define our express app
 var app = express()
-app.use(cookieParser())	// adds
+app.use(cookieParser())	
 app.use(bodyParser.json())
 app.use(cors())	//  This line to magically solves all cross domain error problems!
 
@@ -33,6 +33,7 @@ var options = {
   },
   disable: ['write', 'setHeaders', 'send', 'json', 'end']
 }
+// Timeout handling options End
 app.use(timeout.handler(options))
 
 console.log("= = = Server is UP = = =")
@@ -40,6 +41,8 @@ console.log("========================\n")
 
 
 // === DB MODEL DEFINITION START ===
+
+//initialize connection to the database
 mongoose.connect(process.env.MONGODB_URI, {useNewUrlParser: true})
 
 var Schema = mongoose.Schema;
@@ -51,29 +54,85 @@ var userSchema = new Schema({
 	instagramID: String,
 	instagramToken: String
 });
-
-// adds
 userSchema.plugin(findOrCreate)
 
+// Defines the user model we will actually refer to
 var User = mongoose.model('User', userSchema)
 
+// Defines the pairing schema
 var pairingSchema = new mongoose.Schema({
   hash: String,
   user: {type: Schema.Types.ObjectId, ref: 'User'}
 });
-
 pairingSchema.plugin(findOrCreate)
 
+// Defines the pairing model we will actually refer to
 var Pairing = mongoose.model('Pairing', pairingSchema)
 
 console.log("= = = Schemas & Models up and running = = =\n")
-
 // === MODEL DEFINITION END ===
 
 
-app.get('/gphotos', function(req, res) {
+// === GET Request Route Definitions Start ===
+
+app.get('/login', function(req, res) {
+	res.json({
+		"error": "OK",
+		"errorCode": 200	
+	})
 	
-	if (!req.query.hash){
+})
+
+app.get('/createNewPairing', function(req, res) {
+	var newPairing = new Pairing({ 'hash': sha1((new Date()-0)+process.env.HASH_SALT) })
+	newPairing.save(function (err, newPairing) {
+		if (err) return console.error(err)
+		pairingUrl = process.env.MY_DOMAIN+'/pair/'+newPairing.hash
+		res.json({
+			"url": pairingUrl,
+			"hash": newPairing.hash
+		})
+	})
+});
+
+
+app.get('/pair/:hash', function(req, res)
+{
+	res.cookie('hash', req.params.hash)
+	console.log("added client cookie")
+	
+	if (!req.query.name){
+		res.json({
+			"instagram_url": process.env.MY_DOMAIN+"/auth/instagram",
+			"google_url": process.env.MY_DOMAIN+"/auth/google",
+			"hash": req.params.hash
+		})
+	} else {
+		var name=req.query.name.toLowerCase()
+		res.redirect(name == "google" ? "/auth/google" : name == "instagram" ? "/auth/instagram" : "/pair/"+req.params.hash )	
+	}
+})
+
+app.get('/timeOut', function(req, res) {
+	res.json({
+		"error": "Auth Server returns a Timeout error. Maybe retry later",
+		"errorCode": 503	
+	})
+	
+})
+
+app.get('/Success', function(req, res) {
+	res.json({
+		"error": " Success!",
+		"errorCode": 200	
+	})
+	
+})
+
+// http GET request for google photos
+app.get('/gphotos', function(req, res) { 
+	
+	if (!req.query.hash){ //if cache is missing return error 401
 		
 		res.json({
 			"error": "please authenticate - hash missing",
@@ -104,7 +163,7 @@ app.get('/gphotos', function(req, res) {
 				}
 
 				var user = pairing.user
-				if (!user.googleToken){
+				if (!user.googleToken){ // if the user exists for this pairing but doesn't have a google token yet
 					console.log("ERROR. user has no googleToken")
 					res.json({
 						"error": "This user has no googleToken associated with it",
@@ -171,63 +230,63 @@ app.get('/gphotos', function(req, res) {
 		 })
 })
 
-app.get('/instaphotos', function(req, res) {
+//http GET request for instagram
+app.get('/instaphotos', function(req, res) {	
 	
-	if (!req.query.hash){
+	if (!req.query.hash){	//if cache is missing return error 401
 		
 		res.json({
 			"error": "please authenticate - hash missing",
 			"errorCode": 401	
-
+			
 		})
 	}
-	
-		 Pairing.findOne({"hash": req.query.hash}).populate('user').exec( function(err, pairing){
-			 if (err) {
-				console.log("Error in pairing")
-				res.json({
+	Pairing.findOne({"hash": req.query.hash}).populate('user').exec( function(err, pairing){
+		if (err) {
+			console.log("Error in pairing")
+			res.json({
 				"error": "please authenticate - hash mismatch",
 				"createNewPairingUrl": process.env.MY_DOMAIN+"/createNewPairing",
 				"errorCode": 401	
-				})
-				return
-			}
-			if (pairing){
-				
-				if (!pairing.user){
-					console.log("= = >> ERROR: found pairing but it has no user")
-					res.json({
+			})
+			return
+		}
+		if (pairing){
+
+			if (!pairing.user){
+				console.log("= = >> ERROR: found pairing but it has no user")
+				res.json({
 					"error": "This hash has no user associated with it",
 					"errorCode": 401,
 					"createNewPairingUrl": process.env.MY_DOMAIN+"/createNewPairing"
-					})
-					return
-				}
-				var user = pairing.user
-				if (!user.instagramToken){
-					console.log("ERROR. user has no instagramToken")
-					res.json({
-						"error": "This user has no instagramToken associated with it",
-						"errorCode": 401,
-						"existingPairingUrl": process.env.MY_DOMAIN+"/pair/"+req.query.hash,
-						"createNewPairingUrl": process.env.MY_DOMAIN+"/createNewPairing"
-						})
-						return
-				}
-				console.log("contents of insta token: ",user.instagramToken)
-				
-				request(
+				})
+				return
+			}
+			var user = pairing.user
+			if (!user.instagramToken){
+				console.log("ERROR. user has no instagramToken")
+				res.json({
+					"error": "This user has no instagramToken associated with it",
+					"errorCode": 401,
+					"existingPairingUrl": process.env.MY_DOMAIN+"/pair/"+req.query.hash,
+					"createNewPairingUrl": process.env.MY_DOMAIN+"/createNewPairing"
+				})
+				return
+			}
+			console.log("contents of insta token: ",user.instagramToken)
+			
+			request(
 				{
 					url: 'https://api.instagram.com/v1/users/self/media/recent?access_token='+user.instagramToken,
 					qs: {'fields': 'mediaItems(baseUrl)'},
 					method: 'GET',
 					headers:{'Authorization': 'Bearer ' +user.instagramToken}
-				
+					
 				}, function(err, response, body){
 					if (err) {
 						res.json({
-						"error": "please authenticate",
-						"errorCode": 401	
+							"error": "please authenticate",
+							"errorCode": 401	
 						})
 						return
 					}
@@ -235,11 +294,10 @@ app.get('/instaphotos', function(req, res) {
 					if (body.error){
 						console.log("body.error FOUND!!!")
 						res.json({
-						"error": "please authenticate again - invalid auth token",
-						"errorCode": 401	
+							"error": "please authenticate again - invalid auth token",
+							"errorCode": 401	
 						})
 						return
-						
 					}
 					
 					if (body){
@@ -257,9 +315,9 @@ app.get('/instaphotos', function(req, res) {
 							})
 							body = newbody
 							class PhotoUrl{
-									constructor(baseUrl='') {
-										this.baseUrl = baseUrl
-									}
+								constructor(baseUrl='') {
+									this.baseUrl = baseUrl
+								}
 							}
 							var photoUrls = new Array()
 							body.forEach(element => {
@@ -267,114 +325,98 @@ app.get('/instaphotos', function(req, res) {
 								newUrl.baseUrl=(element['url'])
 								photoUrls.push(newUrl)
 							});
-							
 							body = photoUrls
-
 						};
 						res.json(body)
 						console.log("this is the result from /instaphotos page: \n")
 						console.log(body) 
 						return
-						}
-			  })	
+					}
+				})	
 			}		 
-		 })
-})
-
-app.get('/login', function(req, res) {
-		res.json({
-		"error": "OK",
-		"errorCode": 200	
 		})
-	
-})
-
-app.get('/Success', function(req, res) {
-	res.json({
-	"error": " Success!",
-	"errorCode": 200	
 	})
-
-})
-
-app.get('/timeOut', function(req, res) {
-		res.json({
-		"error": "Auth Server returns a Timeout error. Maybe retry later",
-		"errorCode": 503	
-		})
 	
-})
-
-app.get('/photos', function(req, res) {
-	res.json({
-		"error": "your client is using /photos. it is obsolete. replace /photos in your client code to /gphotos",
-		"newGooglePhotosEndPoint": process.env.MY_DOMAIN+"/gphotos?hash="+(req.query.hash || ""),
-		"errorCode": 401	
-	})
-})
-
-
-
-app.use(express.static('public'))
-
-app.get('/createNewPairing', function(req, res) {
-		
-		var newPairing = new Pairing({ 'hash': sha1((new Date()-0)+process.env.HASH_SALT) })
-		newPairing.save(function (err, newPairing) {
-			if (err) return console.error(err)
-			pairingUrl = process.env.MY_DOMAIN+'/pair/'+newPairing.hash
-			res.json({
-				"url": pairingUrl,
-				"hash": newPairing.hash
-			})
-		 })
-});
-
-passport.use(new InstagramStrategy({
-	clientID: process.env.INSTAGRAM_CLIENT_ID,
-	clientSecret: process.env.INSTAGRAM_CLIENT_SECRET,
-	callbackURL: process.env.MY_DOMAIN+"/auth/instagram/callback",
-	passReqToCallback: true
-},
-function(req, accessToken, refreshToken, profile, done) {
-	User.findOrCreate({ 'instagramID': profile.id }, function (err, user) {
-		if (err){
-			console.log("= = = error in instagramID findOrCreate = = =")
-			console.error(err)
-			return done(err) 
-		}
-
-		Pairing.findOne({'hash': req.cookies.hash}, function (err, pairing){
-			if (err) {
-				
-				console.log("=== No Pairing or hash cookie Found (insta)===")
-				console.error(err)
-				return done(err)
-			}
-			user.instagramToken=accessToken
-			user.save()
-			pairing.user=user
-			pairing.save()
-			
-			return done()
+	
+	app.get('/photos', function(req, res) { // if some user still uses the legacy route
+		res.json({
+			"error": "your client is using /photos. it is obsolete. replace /photos in your client code to /gphotos",
+			"newGooglePhotosEndPoint": process.env.MY_DOMAIN+"/gphotos?hash="+(req.query.hash || ""),
+			"errorCode": 401	
 		})
-	//	return done(err, user);
+	})
+	
+	
+	
+	
+	app.get('/auth/google',passport.authenticate('google', { scope: ['profile', 'email','https://www.googleapis.com/auth/photoslibrary.readonly']}));
+	
+	app.get('/auth/google/callback', 
+	passport.authenticate('google', { failureRedirect: '/login'}),
+	function(req, res) {
+		res.redirect('/Success')
+	})
+	
+	app.get('/auth/instagram',
+	passport.authenticate('instagram'));
+	
+	app.get('/auth/instagram/callback', 
+	passport.authenticate('instagram', { successRedirect: '/Success', failureRedirect: '/login' }),
+	function(req, res) {
+		console.log("function alive!")
+		// Successful authentication, redirect home.
+		res.redirect('/Success');
 	});
-}
-));
-// Use the GoogleStrategy within Passport.
-//   Strategies in passport require a `verify` function, which accept
-//   credentials (in this case, a token, tokenSecret, and Google profile), and
-//   invoke a callback with a user object.
-passport.use(new GoogleStrategy({
-    clientID: process.env.GOOGLE_CLIENT_ID,
-    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    callbackURL: process.env.MY_DOMAIN+"/auth/google/callback",  // using the env.My_DOMAIN I can use this both on localhost and server
-	passReqToCallback: true
-  },
-  function(req, token, tokenSecret, profile, done) {
+	// === GET Request Route Definitions End ===
+	
+	
+	// === Passport.JS Strategies Start ===
+
+	// insta passport strategy
+	passport.use(new InstagramStrategy({
+		clientID: process.env.INSTAGRAM_CLIENT_ID,
+		clientSecret: process.env.INSTAGRAM_CLIENT_SECRET,
+		callbackURL: process.env.MY_DOMAIN+"/auth/instagram/callback",
+		passReqToCallback: true
+	},
+	function(req, accessToken, refreshToken, profile, done) {
+		User.findOrCreate({ 'instagramID': profile.id }, function (err, user) {
+			if (err){
+				console.log("= = = error in instagramID findOrCreate = = =")
+				console.error(err)
+				return done(err) 
+			}
+			
+			Pairing.findOne({'hash': req.cookies.hash}, function (err, pairing){
+				if (err) {
+					
+					console.log("=== No Pairing or hash cookie Found (insta)===")
+					console.error(err)
+					return done(err)
+				}
+				user.instagramToken=accessToken
+				user.save()
+				pairing.user=user
+				pairing.save()
+				
+				return done()
+			})
+			//	return done(err, user);
+		});
+	}
+	));
+
+
+	// Google passport strategy
+	passport.use(new GoogleStrategy({
+		clientID: process.env.GOOGLE_CLIENT_ID,
+		clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+		callbackURL: process.env.MY_DOMAIN+"/auth/google/callback",  // using the env.My_DOMAIN I can use this both on localhost and server
+		passReqToCallback: true
+	},
+	function(req, token, tokenSecret, profile, done) {
 		User.findOne({})
-    User.findOrCreate({ 'googleID': profile.id }, function (err, user) {
+		User.findOrCreate({ 'googleID': profile.id }, function (err, user) {
 			if (err){
 				console.log("= = = error in googleID findOrCreate = = =")
 				return console.error(err)
@@ -392,52 +434,15 @@ passport.use(new GoogleStrategy({
 				pairing.save()
 				return done()
 			})
-			//return done(err, user)
-	  })
-  }
-))
-
-app.get('/pair/:hash', function(req, res)
-		{
-			res.cookie('hash', req.params.hash)
-			console.log("added client cookie")
-			
-			if (!req.query.name){
-				res.json({
-					"instagram_url": process.env.MY_DOMAIN+"/auth/instagram",
-					"google_url": process.env.MY_DOMAIN+"/auth/google",
-					"hash": req.params.hash
-				})
-			} else {
-				var name=req.query.name.toLowerCase()
-				res.redirect(name == "google" ? "/auth/google" : name == "instagram" ? "/auth/instagram" : "/pair/"+req.params.hash )
-
-
-			}
-
-			
-			
 		})
-		
-app.get('/auth/google',passport.authenticate('google', { scope: ['profile', 'email','https://www.googleapis.com/auth/photoslibrary.readonly']}));
-
-app.get('/auth/google/callback', 
-  passport.authenticate('google', { failureRedirect: '/login'}),
-  function(req, res) {
-    res.redirect('/Success')
-  })
-
-	app.get('/auth/instagram',
-  passport.authenticate('instagram'));
-
-	app.get('/auth/instagram/callback', 
-		passport.authenticate('instagram', { successRedirect: '/Success', failureRedirect: '/login' }),
-		function(req, res) {
-			console.log("function alive!")
-			// Successful authentication, redirect home.
-			res.redirect('/Success');
-		});
-
-//keep this last (for convention's sake?)
-app.listen(port);
-
+	}
+	))
+	// === Passport.JS Strategies END ===
+	
+	//required for the initial Google site verification process
+	app.use(express.static('public'))
+	
+	//keep this last (for convention's sake?)
+	app.listen(port);
+	
+	
